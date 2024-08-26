@@ -10,6 +10,14 @@ docker compose up -d
 
 Инициализируем сервер-конфигурацию:
 
+Можно воспользоваться быстрой командой:
+
+```shell
+./scripts/mongo-init.sh
+```
+
+А можно запусить все этапы отдельно:
+
 ```shell
 docker exec -i configSrv mongosh --port 27017 --quiet <<EOF
 rs.initiate(
@@ -21,7 +29,6 @@ rs.initiate(
     ]
   }
 );
-exit();
 EOF
 ```
 
@@ -38,7 +45,6 @@ rs.initiate(
       ]
     }
 );
-exit();
 EOF
 ```
 
@@ -53,7 +59,6 @@ rs.initiate(
       ]
     }
   );
-  exit();
 EOF
 ```
 
@@ -72,8 +77,6 @@ use somedb
 for(var i = 0; i < 1000; i++) db.helloDoc.insert({age:i, name:"ly"+i})
 
 db.helloDoc.countDocuments()
-
-exit();
 
 EOF
 ```

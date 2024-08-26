@@ -10,6 +10,14 @@ docker compose up -d
 
 Инициализируем сервер-конфигурацию:
 
+Можно воспользоваться быстрой командой:
+
+```shell
+./scripts/mongo-init.sh
+```
+
+А можно запусить все этапы отдельно:
+
 ```shell
 docker exec -i configSrv mongosh --port 27017 --quiet <<EOF
 rs.initiate(
