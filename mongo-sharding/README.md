@@ -11,7 +11,7 @@ docker compose up -d
 Инициализируем сервер-конфигурацию:
 
 ```shell
-docker exec -it configSrv mongosh --port 27017 --quiet <<EOF
+docker exec -i configSrv mongosh --port 27017 --quiet <<EOF
 rs.initiate(
   {
     _id : "config_server",
@@ -21,13 +21,14 @@ rs.initiate(
     ]
   }
 );
+exit();
 EOF
 ```
 
 Инициализируем шарды:
 
 ```shell
-docker exec -it shard1 mongosh --port 27018 --quiet <<EOF
+docker exec -i shard1 mongosh --port 27018 --quiet <<EOF
 rs.initiate(
     {
       _id : "shard1",
@@ -37,11 +38,12 @@ rs.initiate(
       ]
     }
 );
+exit();
 EOF
 ```
 
 ```shell
-docker exec -it shard2 mongosh --port 27019 --quiet <<EOF
+docker exec -i shard2 mongosh --port 27019 --quiet <<EOF
 rs.initiate(
     {
       _id : "shard2",
@@ -51,13 +53,14 @@ rs.initiate(
       ]
     }
   );
+  exit();
 EOF
 ```
 
 Инициализируем роутер, создаём базу `somedb`, коллекцию `helloDoc` и заполняем всё тестовыми данными:
 
 ```shell
-docker exec -it mongos_router mongosh --port 27020 --quiet <<EOF
+docker exec -i mongos_router mongosh --port 27020 --quiet <<EOF
 sh.addShard( "shard1/shard1:27018");
 sh.addShard( "shard2/shard2:27019");
 
@@ -70,10 +73,21 @@ for(var i = 0; i < 1000; i++) db.helloDoc.insert({age:i, name:"ly"+i})
 
 db.helloDoc.countDocuments()
 
+exit();
+
 EOF
 ```
 
 ## Как проверить
+
+#### Как проверить элементы в каждом из шардов?
+
+```shell
+docker exec -i shard1 mongosh --port 27018  --quiet <<EOF
+use somedb;
+db.helloDoc.countDocuments();
+EOF
+```
 
 ### Если вы запускаете проект на локальной машине
 

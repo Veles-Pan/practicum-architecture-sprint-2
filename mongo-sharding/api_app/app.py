@@ -82,11 +82,31 @@ class UserCollection(BaseModel):
 async def root():
     collection_names = await db.list_collection_names()
     collections = {}
+
+    # Определяем шард-хосты вручную на основе docker-compose
+    shard_hosts = {
+        "shard1": "shard1:27018",
+        "shard2": "shard2:27019"
+    }
+
     for collection_name in collection_names:
         collection = db.get_collection(collection_name)
+        total_count = await collection.count_documents({})
+        shard_counts = {}
+
+        # Подсчет количества документов в каждом шарде
+        for shard_id, shard_host in shard_hosts.items():
+            shard_client = motor.motor_asyncio.AsyncIOMotorClient(f"mongodb://{shard_host}")
+            shard_db = shard_client[DATABASE_NAME]
+            shard_collection = shard_db.get_collection(collection_name)
+            shard_counts[shard_id] = await shard_collection.count_documents({})
+            shard_client.close()
+
         collections[collection_name] = {
-            "documents_count": await collection.count_documents({})
+            "documents_count": total_count,
+            "shard_counts": shard_counts
         }
+
     try:
         replica_status = await client.admin.command("replSetGetStatus")
         replica_status = json.dumps(replica_status, indent=2, default=str)
@@ -97,13 +117,6 @@ async def root():
     read_preference = client.client_options.read_preference
     topology_type = topology_description.topology_type_name
     replicaset_name = topology_description.replica_set_name
-
-    shards = None
-    if topology_type == "Sharded":
-        shards_list = await client.admin.command("listShards")
-        shards = {}
-        for shard in shards_list.get("shards", {}):
-            shards[shard["_id"]] = shard["host"]
 
     cache_enabled = False
     if REDIS_URL:
@@ -121,7 +134,7 @@ async def root():
         "mongo_is_primary": client.is_primary,
         "mongo_is_mongos": client.is_mongos,
         "collections": collections,
-        "shards": shards,
+        "shards": shard_hosts,
         "cache_enabled": cache_enabled,
         "status": "OK",
     }
