@@ -10,35 +10,12 @@ from fastapi import Body, FastAPI, HTTPException, status
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from fastapi_cache.decorator import cache
-from logmiddleware import RouterLoggingMiddleware
+from logmiddleware import RouterLoggingMiddleware, logging_config
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pydantic.functional_validators import BeforeValidator
 from pymongo import errors
 from redis import asyncio as aioredis
 from typing_extensions import Annotated
-
-logging_config = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "simple": {
-            "format": "%(message)s"  # Формат только с текстом сообщения
-        },
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "simple",  # Используем простой форматтер
-        },
-    },
-    "loggers": {
-        "": {
-            "handlers": ["console"],
-            "level": "ERROR",  # Уровень логирования только для ошибок
-            "propagate": True,
-        },
-    },
-}
 
 # Configure JSON logging
 logging.config.dictConfig(logging_config)
