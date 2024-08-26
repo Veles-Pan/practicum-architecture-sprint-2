@@ -10,12 +10,35 @@ from fastapi import Body, FastAPI, HTTPException, status
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from fastapi_cache.decorator import cache
-from logmiddleware import RouterLoggingMiddleware, logging_config
+from logmiddleware import RouterLoggingMiddleware
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pydantic.functional_validators import BeforeValidator
 from pymongo import errors
 from redis import asyncio as aioredis
 from typing_extensions import Annotated
+
+logging_config = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {
+            "format": "%(message)s"  # Формат только с текстом сообщения
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",  # Используем простой форматтер
+        },
+    },
+    "loggers": {
+        "": {
+            "handlers": ["console"],
+            "level": "ERROR",  # Уровень логирования только для ошибок
+            "propagate": True,
+        },
+    },
+}
 
 # Configure JSON logging
 logging.config.dictConfig(logging_config)
@@ -82,31 +105,11 @@ class UserCollection(BaseModel):
 async def root():
     collection_names = await db.list_collection_names()
     collections = {}
-
-    # Определяем шард-хосты вручную на основе docker-compose
-    shard_hosts = {
-        "shard1": "shard1:27018",
-        "shard2": "shard2:27019"
-    }
-
     for collection_name in collection_names:
         collection = db.get_collection(collection_name)
-        total_count = await collection.count_documents({})
-        shard_counts = {}
-
-        # Подсчет количества документов в каждом шарде
-        for shard_id, shard_host in shard_hosts.items():
-            shard_client = motor.motor_asyncio.AsyncIOMotorClient(f"mongodb://{shard_host}")
-            shard_db = shard_client[DATABASE_NAME]
-            shard_collection = shard_db.get_collection(collection_name)
-            shard_counts[shard_id] = await shard_collection.count_documents({})
-            shard_client.close()
-
         collections[collection_name] = {
-            "documents_count": total_count,
-            "shard_counts": shard_counts
+            "documents_count": await collection.count_documents({})
         }
-
     try:
         replica_status = await client.admin.command("replSetGetStatus")
         replica_status = json.dumps(replica_status, indent=2, default=str)
@@ -117,6 +120,29 @@ async def root():
     read_preference = client.client_options.read_preference
     topology_type = topology_description.topology_type_name
     replicaset_name = topology_description.replica_set_name
+
+    shards = None
+    shard_counts = None
+    if topology_type == "Sharded":
+        shards_list = await client.admin.command("listShards")
+        shards = {}
+        shard_counts = {}
+        for shard in shards_list.get("shards", {}):
+            shards[shard["_id"]] = shard["host"]
+            for shard_host in shard.get("host", "").split(","):
+                parts = shard_host.split("/")
+
+                if len(parts) > 1:
+                    actual_host = parts[1]
+                else:
+                    continue
+
+                shard_client = motor.motor_asyncio.AsyncIOMotorClient(f"mongodb://{actual_host}")
+                shard_db = shard_client[DATABASE_NAME]
+                shard_collection = shard_db.get_collection(collection_name)
+                shard_counts_current = await shard_collection.count_documents({})
+                shard_counts[actual_host] = shard_counts_current
+                shard_client.close()
 
     cache_enabled = False
     if REDIS_URL:
@@ -134,7 +160,8 @@ async def root():
         "mongo_is_primary": client.is_primary,
         "mongo_is_mongos": client.is_mongos,
         "collections": collections,
-        "shards": shard_hosts,
+        "shards": shards,
+        "shard_counts": shard_counts,
         "cache_enabled": cache_enabled,
         "status": "OK",
     }

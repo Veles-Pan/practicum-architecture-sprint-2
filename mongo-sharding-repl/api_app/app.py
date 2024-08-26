@@ -123,6 +123,7 @@ async def root():
 
     shards = None
     shard_counts = None
+    shard_replica_counts = {}
     if topology_type == "Sharded":
         shards_list = await client.admin.command("listShards")
         shards = {}
@@ -131,23 +132,30 @@ async def root():
             shards[shard["_id"]] = shard["host"]
             for shard_host in shard.get("host", "").split(","):
                 parts = shard_host.split("/")
-
                 if len(parts) > 1:
                     actual_host = parts[1]
                 else:
-                    actual_host = parts[0]
-
+                    continue 
                 shard_client = motor.motor_asyncio.AsyncIOMotorClient(f"mongodb://{actual_host}")
 
                 shard_db = shard_client[DATABASE_NAME]
 
                 shard_collection = shard_db.get_collection(collection_name)
 
+
                 shard_counts_current = await shard_collection.count_documents({})
 
                 shard_counts[actual_host] = shard_counts_current
-                shard_client.close()
 
+                # Запрос реплик для каждого шарда
+                try:
+                    shard_replica_status = await shard_client.admin.command("replSetGetStatus")
+                    shard_replica_count = len(shard_replica_status.get("members", []))
+                    shard_replica_counts[actual_host] = shard_replica_count
+                except errors.OperationFailure:
+                    shard_replica_counts[actual_host] = "No Replicas"
+
+                shard_client.close()
 
 
     cache_enabled = False
@@ -168,6 +176,7 @@ async def root():
         "collections": collections,
         "shards": shards,
         "shard_counts": shard_counts,
+        "shard_replica_counts": shard_replica_counts,
         "cache_enabled": cache_enabled,
         "status": "OK",
     }
