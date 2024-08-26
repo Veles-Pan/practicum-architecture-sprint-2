@@ -6,10 +6,10 @@
 
 ```shell
 cd sharding-repl-cache
-docker compose up -d
+docker compose up
 ```
 
-Инициализируем сервер-конфигурацию:
+Инициализируем сервера и заполняем базу данными:
 
 ```shell
 cd sharding-repl-cache
